@@ -90,11 +90,11 @@ async function convert(){
    catch{cache.delete(key);saved=null;}
    if(saved){complete(saved,true);return;}
   }
-  if(!worker)worker=new Worker(new URL('./src/step-worker.js',import.meta.url),{type:'module'});
+  if(!worker)worker=new Worker(new URL('./src/step-worker.js',import.meta.url),{type:'module',name:'step-session'});
   worker.onmessage=({data})=>{
    if(data.id!==generation||generation!==conversionGeneration)return;
    if(data.type==='progress'){if($('progress-label').textContent!==data.text)stageStarted=Date.now();$('progress-label').textContent=data.text;$('progress').value=data.percent;}
-   else if(data.type==='error'){cancelConversion();$('save-state').textContent='转换失败';$('conversion-error').hidden=false;$('conversion-error').textContent=data.message;}
+   else if(data.type==='error'){if(data.keepsModel){workerHash=hash;finishConversion();}else cancelConversion();$('save-state').textContent='转换失败';$('conversion-error').hidden=false;$('conversion-error').textContent=data.message;}
    else if(data.type==='result'){workerHash=hash;cache.set(key,structuredClone(data.result));if(cache.size>2)cache.delete(cache.keys().next().value);void putProjection(key,data.result);complete(data.result,false,data.timings);}
   };
   worker.onerror=event=>{if(generation!==conversionGeneration)return;cancelConversion();$('save-state').textContent='转换失败';$('conversion-error').hidden=false;$('conversion-error').textContent=event.message||'内核运行失败，模型可能超出浏览器可用内存';};

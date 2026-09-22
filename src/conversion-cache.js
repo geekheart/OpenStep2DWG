@@ -1,5 +1,5 @@
 // Increment when projection semantics or the pinned geometry engine changes.
-export const CACHE_VERSION='occt-b5ff984-projection-1';
+export const CACHE_VERSION='occt-b5ff984-projection-2';
 export function conversionKey(hash,options){
  return JSON.stringify([CACHE_VERSION,hash,options.detail||'full',options.rotation||0,options.tolerance||.01,options.views||['top','bottom','front']]);
 }

@@ -52,11 +52,29 @@ test('STEP import runs in a Worker with local requests only, supports cancel and
  expect(await page.evaluate(()=>window.conversions.at(-1).cached)).toBe(false);
  expect(requests.every(([u,m])=>(u.startsWith(url)||u.startsWith('blob:'))&&m==='GET')).toBe(true);
 });
+test('an empty third view recovers in a fresh Worker and retains a complete drawing',async({page})=>{
+ const source=await readFile('src/occt-kernel.js','utf8'),marker='export function projectView(oc,shape,name,rotation=0,tolerance=.01) {';
+ expect(source).toContain(marker);
+ await page.route('**/src/occt-kernel.js',route=>route.fulfill({contentType:'text/javascript',body:source.replace(marker,marker+"\nif(self.name==='step-session'&&name==='front')throw new EmptyProjectionError(name,rotation);\n")}));
+ const requests=[];page.context().on('request',r=>requests.push([r.url(),r.method()]));
+ await page.goto(url);await page.locator('#step-file').setInputFiles('assets/demo.step');
+ await expect(page.locator('#save-state')).toHaveText(/转换完成|转换失败/,{timeout:60000});await expect(page.locator('#conversion-error')).toBeHidden();
+ await expect(page.locator('#entity-total')).toHaveText('124 条轮廓');
+ const pending=page.waitForEvent('download');await page.locator('#save-project').click();const drawing=JSON.parse(await readFile(await (await pending).path(),'utf8'));
+ expect(drawing.geometry.views.map(v=>v.id)).toEqual(['top','bottom','front']);
+ expect(drawing.geometry.views.find(v=>v.id==='front').isolated).toBe(true);
+ expect(drawing.geometry.removed).toBe(0);expect(drawing.geometry.options.detail).toBe('full');
+ expect(requests.every(([u,m])=>(u.startsWith(url)||u.startsWith('blob:'))&&m==='GET')).toBe(true);
+});
 test('real STEP regression: browser conversion, DWG export and saved projection',async({page})=>{
  test.skip(!process.env.STEP_TEST_FILE,'Set STEP_TEST_FILE for a local CAD regression');test.setTimeout(900000);
  await page.addInitScript(()=>{window.conversions=[];window.addEventListener('conversion-complete',e=>window.conversions.push(e.detail));});
- await page.goto(url);await page.locator('#step-file').setInputFiles(process.env.STEP_TEST_FILE);
- await expect(page.locator('#save-state')).toHaveText(/转换完成|转换失败/,{timeout:840000});await expect(page.locator('#save-state')).toHaveText('转换完成');
+ await page.goto(url);
+ const started=Date.now();await page.exposeFunction('reportStage',stage=>console.log(`${((Date.now()-started)/1000).toFixed(1)}s ${stage}`));
+ await page.evaluate(()=>{const label=document.getElementById('progress-label');new MutationObserver(()=>window.reportStage(label.textContent)).observe(label,{childList:true});});
+ await page.locator('#step-file').setInputFiles(process.env.STEP_TEST_FILE);
+ await expect(page.locator('#save-state')).toHaveText(/转换完成|转换失败/,{timeout:840000});
+ expect(await page.locator('#conversion-error').textContent()).toBe('');await expect(page.locator('#save-state')).toHaveText('转换完成');
  await expect(page.locator('#conversion-error')).toBeHidden();
  const pending=page.waitForEvent('download');await page.locator('#save-project').click();const json=await pending;await json.saveAs('/private/tmp/openstep-browser-project.json');
  await page.locator('#export').click();await expect(page.locator('#export-info')).toContainText('回读校验通过',{timeout:60000});
@@ -70,7 +88,7 @@ test('real STEP regression: browser conversion, DWG export and saved projection'
 });
 test('local drawing visual review: S31, P4 and all export formats',async({page})=>{
  test.skip(!process.env.LOCAL_REVIEW,'Local CAD fixtures are not distributed');
- for(const name of ['WT9932S31-TINY','WT9932P4-TINY']){
+ for(const name of (process.env.LOCAL_REVIEW_PROJECTS||'WT9932S31-TINY,WT9932P4-TINY').split(',')){
   await page.goto(url);await page.locator('#project-file').setInputFiles(`.local-review/${name}.json`);await expect(page.locator('#save-state')).toHaveText('项目已打开');
   await page.locator('#export').click();await expect(page.locator('#export-info')).toContainText('回读校验通过',{timeout:60000});
   for(const format of ['dwg','dxf','png']){

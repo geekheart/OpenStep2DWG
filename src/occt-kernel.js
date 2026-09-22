@@ -21,6 +21,17 @@ export function readStep(oc, bytes, report=()=>{}) {
     return shape;
   } finally {reader.delete();progress.delete();oc.FS.unlink(filename);}
 }
+export function writeBREP(oc,shape){
+  const path='/projection.brep',progress=new oc.Message_ProgressRange_1();
+  try{if(!oc.BRepTools.Write_3(shape,path,progress))throw Error('模型快照生成失败');return oc.FS.readFile(path);}
+  finally{progress.delete();if(oc.FS.analyzePath(path).exists)oc.FS.unlink(path);}
+}
+export function readBREP(oc,bytes){
+  const path='/projection.brep',shape=new oc.TopoDS_Shape(),builder=new oc.BRep_Builder(),progress=new oc.Message_ProgressRange_1();
+  try{oc.FS.writeFile(path,bytes);if(!oc.BRepTools.Read_2(shape,path,builder,progress)||shape.IsNull())throw Error('模型快照读取失败');return shape;}
+  catch(error){shape.delete();throw error;}
+  finally{builder.delete();progress.delete();if(oc.FS.analyzePath(path).exists)oc.FS.unlink(path);}
+}
 // Only discard thin artwork lying on a dominant planar body's faces, preserving the envelope.
 export function mechanicalShape(oc,shape,tolerance=.08) {
   let board=null,area=0,removed=0;
@@ -114,16 +125,23 @@ function extract(oc,edge,tolerance) {
   } finally {c.delete();}
 }
 export const VIEW_AXES={top:[[0,0,1],[1,0,0]],bottom:[[0,0,-1],[-1,0,0]],front:[[0,-1,0],[1,0,0]],left:[[-1,0,0],[0,-1,0]]};
+export class EmptyProjectionError extends Error {
+  constructor(view,rotation){
+    super(`${{top:'正面',bottom:'背面',front:'前侧',left:'左侧'}[view]}投影失败（${rotation}°）：内核未返回可见轮廓。已保留模型和已完成视图。`);
+    this.code='EMPTY_PROJECTION';this.view=view;
+  }
+}
 export function projectView(oc,shape,name,rotation=0,tolerance=.01) {
   const theta=-rotation*Math.PI/180;
   const rotate=([x,y,z])=>[x*Math.cos(theta)-y*Math.sin(theta),x*Math.sin(theta)+y*Math.cos(theta),z];
   const [normal,right]=VIEW_AXES[name].map(rotate);
   const algo=new oc.HLRBRep_Algo_1(),point=new oc.gp_Pnt_3(0,0,0),dir=new oc.gp_Dir_4(...normal),xdir=new oc.gp_Dir_4(...right);
   const axes=new oc.gp_Ax2_2(point,dir,xdir),proj=new oc.HLRAlgo_Projector_2(axes);
-  algo.Add_2(shape,0);algo.Projector_1(proj);algo.Update();algo.Hide_1();
-  const handle=new oc.Handle_HLRBRep_Algo_2(algo),conv=new oc.HLRBRep_HLRToShape(handle);
+  const handle=new oc.Handle_HLRBRep_Algo_2(algo);let conv=null;
   const entities=[],seen=new Set();
   try {
+    algo.Add_2(shape,0);algo.Projector_1(proj);algo.Update();algo.Hide_1();
+    conv=new oc.HLRBRep_HLRToShape(handle);
     for(const method of ['VCompound_1','Rg1LineVCompound_1','RgNLineVCompound_1','OutLineVCompound_1','IsoLineVCompound_1']) {
       const projected=conv[method]();
       if(projected.IsNull()){projected.delete();continue;}
@@ -134,10 +152,10 @@ export function projectView(oc,shape,name,rotation=0,tolerance=.01) {
         finally{edge.delete();raw.delete();}
       }} finally {ex.delete();projected.delete();}
     }
-    if(!entities.length)throw new Error('投影视图没有可见轮廓');
+    if(!entities.length)throw new EmptyProjectionError(name,rotation);
     return {id:name,entities};
   } finally {
-    conv.delete();handle.delete();proj.delete();axes.delete();point.delete();dir.delete();xdir.delete();
+    conv?.delete();handle.delete();proj.delete();axes.delete();point.delete();dir.delete();xdir.delete();
   }
 }
 // One parsed model per Worker; changing the view set only computes missing views.
@@ -147,17 +165,27 @@ export function createStepSession(oc,bytes,progress=()=>{}) {
   try {progress('计算精确外形尺寸',22);envelope=bounds(oc,raw);}
   catch(error){raw.delete();throw error;}
   const projections=new Map();
+  const projectionKey=(options,name)=>JSON.stringify([options.detail||'full',name,options.rotation||0,options.tolerance||.01]);
+  function selectShape(options,report=()=>{}){
+    if(disposed)throw Error('模型已释放，请重新导入');
+    if(options.detail==='mechanical'){
+      if(!mechanical){report('简化表面细节',25);mechanical=mechanicalShape(oc,raw);}
+      return mechanical;
+    }
+    return {shape:raw,removed:0};
+  }
   return {
-    convert(options={},report=()=>{}) {
+    snapshot(options={}){return writeBREP(oc,selectShape(options).shape);},
+    remember(options,view){
       if(disposed)throw Error('模型已释放，请重新导入');
-      let shape=raw,removed=0;
-      if(options.detail==='mechanical'){
-        if(!mechanical){report('简化表面细节',25);mechanical=mechanicalShape(oc,raw);}
-        ({shape,removed}=mechanical);
-      }
+      if(!VIEW_AXES[view?.id]||!view.entities?.length)throw Error('恢复的投影无效');
+      projections.set(projectionKey(options,view.id),{...view,isolated:true});
+    },
+    convert(options={},report=()=>{}) {
+      const {shape,removed}=selectShape(options,report);
       const names=options.views||['top','bottom','front'],views=[];
       for(let i=0;i<names.length;i++){
-        const name=names[i],key=JSON.stringify([options.detail||'full',name,options.rotation||0,options.tolerance||.01]);
+        const name=names[i],key=projectionKey(options,name);
         const cached=projections.get(key),label={top:'正面',bottom:'背面',front:'前侧',left:'左侧'}[name];
         report(`${cached?'复用':'计算'}${label}投影 · ${i+1}/${names.length}`,30+i/names.length*60);
         const view=cached||projectView(oc,shape,name,options.rotation||0,options.tolerance||.01);
