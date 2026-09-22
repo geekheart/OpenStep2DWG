@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import init from 'opencascade.js/dist/node.js';
+import {readStep,projectView} from '../src/occt-kernel.js';
+import {entityBounds} from '../src/model.js';
+test('STEP exact projection: analytic holes, hidden edges, rotation and three orthogonal views',async()=>{
+ const oc=await init({module:{wasmBinary:readFileSync(new URL('../node_modules/opencascade.js/dist/opencascade.full.wasm',import.meta.url))}});
+ const shape=readStep(oc,readFileSync(new URL('../assets/demo.step',import.meta.url)));
+ const top=projectView(oc,shape,'top'),bottom=projectView(oc,shape,'bottom'),front=projectView(oc,shape,'front'),rotated=projectView(oc,shape,'top',90);
+ const size=v=>{const b=entityBounds(v.entities);return [b[2]-b[0],b[3]-b[1]].map(x=>Number(x.toFixed(3)));};
+ assert.deepEqual(size(top),[56,28]);assert.deepEqual(size(bottom),[56,28]);assert.deepEqual(size(front),[56,6.6]);assert.deepEqual(size(rotated),[28,56]);
+ assert.equal(top.entities.filter(e=>e.type==='circle').length,40);assert.equal(bottom.entities.filter(e=>e.type==='circle').length,40);assert.equal(front.entities.filter(e=>e.type==='circle').length,0);
+ assert.ok(top.entities.length>bottom.entities.length);shape.delete();
+ assert.throws(()=>readStep(oc,new TextEncoder().encode('not a STEP file')));
+});

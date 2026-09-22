@@ -1,0 +1,8 @@
+node_modules/
+dist/
+engine/target/
+test-results/
+playwright-report/
+.local-review/
+.DS_Store
+*.log

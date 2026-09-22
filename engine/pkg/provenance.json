@@ -1,0 +1,13 @@
+{
+  "format": 1,
+  "crate": "acadrust 0.5.5",
+  "bindings": "wasm-bindgen 0.2.128",
+  "target": "wasm32-unknown-unknown",
+  "files": {
+    "engine/src/lib.rs": "23a1450559dec543bb558398b11a9445de9e263e271f83910b26c5f891c95678",
+    "engine/Cargo.toml": "cb14643b205ce20c7aa6a142e2b4fde7923902de369d11527674ecdefdd0ee0e",
+    "engine/Cargo.lock": "af140e3359a1141652983b02f6be78d6d623c97266b0665badbe0c44ff574d71",
+    "engine/pkg/dwg.js": "671c8969d2a1593698ca6ffeabf5ceaa117dcfa1b5be3edf556652ac0a4f982b",
+    "engine/pkg/dwg_bg.wasm": "e058315c4018ef2b43442b55dd59391a0dc28ffce33d460f6a28a0ad3078460a"
+  }
+}

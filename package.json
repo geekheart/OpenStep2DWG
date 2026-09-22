@@ -1,0 +1,22 @@
+{
+  "name": "openstep2dwg",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "浏览器里的 STEP 转 DWG 工作台",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/engine-provenance.mjs --check && node --test tests/*.test.mjs",
+    "test:e2e": "playwright test"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "opencascade.js": "2.0.0-beta.b5ff984"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
