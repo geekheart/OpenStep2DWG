@@ -7,12 +7,14 @@ export function bounds(oc, shape) {
   try {oc.BRepBndLib.AddOptimal(shape,b,false,false);return [xyz(b.CornerMin()),xyz(b.CornerMax())];}
   finally {b.delete();}
 }
-export function readStep(oc, bytes) {
+export function readStep(oc, bytes, report=()=>{}) {
   const filename='/source.step', reader=new oc.STEPControl_Reader_1(),progress=new oc.Message_ProgressRange_1();
   oc.FS.writeFile(filename,bytes);
   try {
+    report('本地解析 STEP',10);
     if(reader.ReadFile(filename).value!==oc.IFSelect_ReturnStatus.IFSelect_RetDone.value) throw new Error('无法读取 STEP 文件');
     reader.SetSystemLengthUnit(1);
+    report('构建实体几何',16);
     if(!reader.TransferRoots(progress)) throw new Error('STEP 中没有可转换的几何体');
     const shape=reader.OneShape();
     if(shape.IsNull()) throw new Error('STEP 模型为空');
@@ -138,21 +140,39 @@ export function projectView(oc,shape,name,rotation=0,tolerance=.01) {
     conv.delete();handle.delete();proj.delete();axes.delete();point.delete();dir.delete();xdir.delete();
   }
 }
+// One parsed model per Worker; changing the view set only computes missing views.
+export function createStepSession(oc,bytes,progress=()=>{}) {
+  const raw=readStep(oc,bytes,progress);
+  let envelope,mechanical=null,disposed=false;
+  try {progress('计算精确外形尺寸',22);envelope=bounds(oc,raw);}
+  catch(error){raw.delete();throw error;}
+  const projections=new Map();
+  return {
+    convert(options={},report=()=>{}) {
+      if(disposed)throw Error('模型已释放，请重新导入');
+      let shape=raw,removed=0;
+      if(options.detail==='mechanical'){
+        if(!mechanical){report('简化表面细节',25);mechanical=mechanicalShape(oc,raw);}
+        ({shape,removed}=mechanical);
+      }
+      const names=options.views||['top','bottom','front'],views=[];
+      for(let i=0;i<names.length;i++){
+        const name=names[i],key=JSON.stringify([options.detail||'full',name,options.rotation||0,options.tolerance||.01]);
+        const cached=projections.get(key),label={top:'正面',bottom:'背面',front:'前侧',left:'左侧'}[name];
+        report(`${cached?'复用':'计算'}${label}投影 · ${i+1}/${names.length}`,30+i/names.length*60);
+        const view=cached||projectView(oc,shape,name,options.rotation||0,options.tolerance||.01);
+        projections.delete(key);projections.set(key,view);
+        if(projections.size>12)projections.delete(projections.keys().next().value);
+        views.push(view);
+      }
+      const approximated=views.reduce((n,v)=>n+v.entities.filter(e=>e.approximated).length,0);
+      report('排版完成',100);
+      return {views,envelope,removed,approximated,unit:'mm',options};
+    },
+    dispose(){if(disposed)return;disposed=true;projections.clear();if(mechanical&&mechanical.shape!==raw)mechanical.shape.delete();raw.delete();}
+  };
+}
 export function convertStep(oc,bytes,options={},progress=()=>{}) {
-  progress('读取 STEP',10);
-  const raw=readStep(oc,bytes),envelope=bounds(oc,raw);
-  let shape=raw,removed=0;
-  try {
-    if(options.detail==='mechanical'){
-      progress('简化表面细节',25);({shape,removed}=mechanicalShape(oc,raw));
-    }
-    const names=options.views||['top','bottom','front'],views=[];
-    for(let i=0;i<names.length;i++){
-      progress(`生成${{top:'正面',bottom:'背面',front:'侧面',left:'左侧'}[names[i]]}投影`,30+i/names.length*60);
-      views.push(projectView(oc,shape,names[i],options.rotation||0,options.tolerance||.01));
-    }
-    const approximated=views.reduce((n,v)=>n+v.entities.filter(e=>e.approximated).length,0);
-    progress('排版完成',100);
-    return {views,envelope,removed,approximated,unit:'mm',options};
-  } finally {if(shape!==raw)shape.delete();raw.delete();}
+  const session=createStepSession(oc,bytes,progress);
+  try{return session.convert(options,progress);}finally{session.dispose();}
 }

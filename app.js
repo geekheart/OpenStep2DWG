@@ -1,9 +1,10 @@
 import {createProject,validateProject,layoutProject,drawingSVG,buildDrawing,VIEW_LABELS,number} from './src/model.js';
 import {exportDXF} from './src/dxf.js';
+import {conversionKey,getProjection,putProjection} from './src/conversion-cache.js';
 const $=id=>document.getElementById(id),MM=96/25.4;
 let project,selected='top',source=null,rotation=0,worker=null,jobTimer=null,jobStarted=0,history=[],future=[],camera={x:0,y:0,scale:1},drag=null,pendingRender=false,exportURL=null,previewURL=null,exportBlob=null,exportWorker=null,exportGeneration=0,toastTimer;
-let conversionGeneration=0;
-const cache=new Map();
+let conversionGeneration=0,workerHash=null,stageStarted=0;
+const cache=new Map(),sourceHashes=new WeakMap();
 function toast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,4000);}
 function snapshot(){return JSON.stringify(project);}
 function commit(){history.push(snapshot());if(history.length>15)history.shift();future=[];$('save-state').textContent='未保存';updateHistory();}
@@ -54,29 +55,53 @@ $('project-name').onchange=()=>{commit();project.name=$('project-name').value.tr
 for(const [id,axis]of [['view-x',0],['view-y',1]])$(id).onchange=()=>{const n=Number($(id).value);if(!Number.isFinite(n)||Math.abs(n)>100000){setSelected(selected);return;}commit();project.positions[selected][axis]=n;render();};
 $('reset-layout').onclick=()=>{commit();layoutProject(project);sync();render();};
 $('align-views').onclick=()=>{commit();project.positions.front[0]=project.positions.top[0];render();};
-function cancelConversion(){conversionGeneration++;if(worker){worker.terminate();worker=null;}clearInterval(jobTimer);$('progress-card').hidden=true;$('convert').disabled=!source;$('import-step').disabled=false;$('load-demo').disabled=false;}
-$('cancel').onclick=()=>{cancelConversion();toast('转换已取消');};
+function finishConversion(){clearInterval(jobTimer);jobTimer=null;$('progress-card').hidden=true;$('convert').disabled=!source;$('import-step').disabled=false;$('load-demo').disabled=false;}
+function cancelConversion(){conversionGeneration++;if(worker){worker.terminate();worker=null;}workerHash=null;finishConversion();}
+$('cancel').onclick=()=>{cancelConversion();$('save-state').textContent='已取消';toast('转换已取消');};
 async function importStep(file){
  if(!file||!(/\.(stp|step)$/i).test(file.name)){toast('请选择 .step 或 .stp 文件');return;}
  if(file.size>150*1024*1024){toast('当前支持 150 MB 以内的 STEP 文件');return;}
- cancelConversion();source=file;$('source-name').textContent=file.name;$('source-info').textContent=(file.size/1024/1024).toFixed(2)+' MB · STEP';$('convert').disabled=false;await convert();
+ if(jobTimer)cancelConversion();source=file;$('source-name').textContent=file.name;$('source-info').textContent=(file.size/1024/1024).toFixed(2)+' MB · 本地文件';$('convert').disabled=false;await convert();
 }
 $('import-step').onclick=()=>$('step-file').click();$('step-file').onchange=event=>{const f=event.target.files[0];event.target.value='';if(f)importStep(f);};
 async function convert(){
  if(!source)return;
- cancelConversion();const generation=conversionGeneration;$('conversion-error').hidden=true;$('progress-card').hidden=false;$('progress-label').textContent='准备转换';$('progress').value=0;$('convert').disabled=true;$('import-step').disabled=true;$('load-demo').disabled=true;
- $('save-state').textContent='正在转换';jobStarted=Date.now();jobTimer=setInterval(()=>$('elapsed').textContent=`已用时 ${Math.floor((Date.now()-jobStarted)/1000)} 秒`,1000);
+ if(jobTimer)cancelConversion();const generation=++conversionGeneration,file=source;$('conversion-error').hidden=true;$('progress-card').hidden=false;$('progress-label').textContent='读取本地文件';$('progress').value=0;$('convert').disabled=true;$('import-step').disabled=true;$('load-demo').disabled=true;
+ $('save-state').textContent='本地计算中';jobStarted=stageStarted=Date.now();$('elapsed').textContent='已用时 0 秒';jobTimer=setInterval(()=>$('elapsed').textContent=`已用时 ${Math.floor((Date.now()-jobStarted)/1000)} 秒 · 当前阶段 ${Math.floor((Date.now()-stageStarted)/1000)} 秒`,1000);
  const options={rotation,detail:$('detail').value,tolerance:.01,views:$('view-layout').value==='inspection'?['top','bottom','front']:['top','front','left']};
  try {
-  const bytes=await source.arrayBuffer(),hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join(''),key=hash+JSON.stringify(options);
-  function complete(geometry){if(generation!==conversionGeneration)return;commit();const old=project;project=createProject(geometry,source.name.replace(/\.(step|stp)$/i,''));project.source={name:source.name,size:source.size,sha256:hash};project.settings.revision=old.settings.revision;cancelConversion();selected='top';sync();render();fit();$('save-state').textContent='转换完成';toast(`已生成 ${geometry.views.length} 个视图${geometry.approximated?`，${geometry.approximated} 条曲线以 0.01 mm 公差近似`:''}`);}
+  let bytes,hash=sourceHashes.get(file);
+  if(!hash){bytes=await file.arrayBuffer();hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');sourceHashes.set(file,hash);}
+  const key=conversionKey(hash,options);
+  function complete(geometry,cached=false,timings=[]){
+   if(generation!==conversionGeneration)return;
+   commit();const old=project;project=createProject(geometry,file.name.replace(/\.(step|stp)$/i,''));project.source={name:file.name,size:file.size,sha256:hash};project.settings.revision=old.settings.revision;
+   finishConversion();selected='top';sync();render();fit();$('save-state').textContent='转换完成';
+   const seconds=(Date.now()-jobStarted)/1000;$('source-info').textContent=`${(file.size/1048576).toFixed(2)} MB · ${cached?'本地缓存':'本地计算'} · ${seconds.toFixed(1)} 秒`;
+   window.dispatchEvent(new CustomEvent('conversion-complete',{detail:{cached,seconds,timings}}));
+   toast(`${cached?'已恢复本地缓存':'已生成 '+geometry.views.length+' 个视图'}${geometry.approximated?`，${geometry.approximated} 条曲线以 0.01 mm 公差近似`:''}`);
+  }
   if(generation!==conversionGeneration)return;
-  if(cache.has(key)){complete(structuredClone(cache.get(key)));return;}
-  worker=new Worker(new URL('./src/step-worker.js',import.meta.url),{type:'module'});
-  worker.onmessage=({data})=>{if(data.type==='progress'){$('progress-label').textContent=data.text;$('progress').value=data.percent;}else if(data.type==='error'){cancelConversion();$('conversion-error').hidden=false;$('conversion-error').textContent=data.message;}else{cache.set(key,structuredClone(data.result));if(cache.size>2)cache.delete(cache.keys().next().value);complete(data.result);}};
-  worker.onerror=event=>{cancelConversion();$('conversion-error').hidden=false;$('conversion-error').textContent=event.message||'内核运行失败，模型可能超出浏览器可用内存';};
-  worker.postMessage({bytes,options},[bytes]);
- }catch(error){cancelConversion();$('conversion-error').hidden=false;$('conversion-error').textContent=error.message;}
+  $('progress-label').textContent='检查本地缓存';
+  let saved=cache.get(key)||await getProjection(key);
+  if(generation!==conversionGeneration)return;
+  if(saved){
+   try{saved=validateProject(createProject(structuredClone(saved),'Cached')).geometry;}
+   catch{cache.delete(key);saved=null;}
+   if(saved){complete(saved,true);return;}
+  }
+  if(!worker)worker=new Worker(new URL('./src/step-worker.js',import.meta.url),{type:'module'});
+  worker.onmessage=({data})=>{
+   if(data.id!==generation||generation!==conversionGeneration)return;
+   if(data.type==='progress'){if($('progress-label').textContent!==data.text)stageStarted=Date.now();$('progress-label').textContent=data.text;$('progress').value=data.percent;}
+   else if(data.type==='error'){cancelConversion();$('save-state').textContent='转换失败';$('conversion-error').hidden=false;$('conversion-error').textContent=data.message;}
+   else if(data.type==='result'){workerHash=hash;cache.set(key,structuredClone(data.result));if(cache.size>2)cache.delete(cache.keys().next().value);void putProjection(key,data.result);complete(data.result,false,data.timings);}
+  };
+  worker.onerror=event=>{if(generation!==conversionGeneration)return;cancelConversion();$('save-state').textContent='转换失败';$('conversion-error').hidden=false;$('conversion-error').textContent=event.message||'内核运行失败，模型可能超出浏览器可用内存';};
+  if(workerHash!==hash)bytes??=await file.arrayBuffer();else bytes=undefined;
+  if(generation!==conversionGeneration)return;
+  worker.postMessage({id:generation,hash,bytes,options},bytes?[bytes]:[]);
+ }catch(error){if(generation!==conversionGeneration)return;cancelConversion();$('save-state').textContent='转换失败';$('conversion-error').hidden=false;$('conversion-error').textContent=error.message;}
 }
 $('convert').onclick=convert;
 async function loadDemo(initial=false){
@@ -123,7 +148,7 @@ document.addEventListener('keydown',event=>{
  const editable=/INPUT|TEXTAREA|SELECT/.test(event.target.tagName);if(editable)return;
  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?redo():undo();}
  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='s'){event.preventDefault();$('save-project').click();}
- if(event.key==='Escape'&&worker){cancelConversion();toast('转换已取消');}
+ if(event.key==='Escape'&&jobTimer){cancelConversion();$('save-state').textContent='已取消';toast('转换已取消');}
  if(event.target.closest('[data-view]')&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();commit();const d=event.shiftKey?5:1,p=project.positions[selected];if(event.key==='ArrowLeft')p[0]-=d;if(event.key==='ArrowRight')p[0]+=d;if(event.key==='ArrowUp')p[1]+=d;if(event.key==='ArrowDown')p[1]-=d;render();$('paper').querySelector(`[data-view="${selected}"]`).focus();}
 });
 await loadDemo(true);

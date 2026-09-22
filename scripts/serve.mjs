@@ -8,7 +8,7 @@ createServer(async(req,res)=>{
   const path=decodeURIComponent(new URL(req.url,'http://localhost').pathname),file=resolve(root,'.'+(path==='/'?'/index.html':path));
   if(!file.startsWith(root+sep))throw Error('Invalid path');
   const info=await stat(file);if(!info.isFile())throw Error('Not a file');
-  res.writeHead(200,{'Content-Type':types[extname(file)]||'application/octet-stream','Content-Length':info.size,'Cache-Control':extname(file)==='.wasm'?'public, max-age=3600':'no-cache','X-Content-Type-Options':'nosniff'});
+  res.writeHead(200,{'Content-Type':types[extname(file)]||'application/octet-stream','Content-Length':info.size,'Cache-Control':/\.wasm(\.gz)?$/.test(file)?'public, max-age=3600':'no-cache','X-Content-Type-Options':'nosniff'});
   res.end(await readFile(file));
  }catch{res.writeHead(404);res.end('Not found');}
 }).listen(port,'127.0.0.1',()=>console.log(`OpenStep2DWG http://127.0.0.1:${port}`));

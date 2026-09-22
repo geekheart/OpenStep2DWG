@@ -1,7 +1,11 @@
-import {cp,mkdir,rm,stat} from 'node:fs/promises';
+import {cp,mkdir,rm,stat,readFile,writeFile} from 'node:fs/promises';
+import {gzipSync} from 'node:zlib';
 await stat('engine/pkg/dwg_bg.wasm').catch(()=>{throw Error('DWG 内核未编译。请先运行 scripts/build-engine.sh');});
 await rm('dist',{recursive:true,force:true});
 for(const file of ['index.html','style.css','app.js','src','assets','engine/pkg','THIRD_PARTY_NOTICES.md','LICENSE','docs/licenses'])await cp(file,`dist/${file}`,{recursive:true});
 await mkdir('dist/vendor/occt',{recursive:true});
 for(const [from,to] of [['opencascade.full.js','occt.js'],['opencascade.full.wasm','occt.wasm']])await cp(`node_modules/opencascade.js/dist/${from}`,`dist/vendor/occt/${to}`);
+const kernel=await readFile('dist/vendor/occt/occt.wasm'),compressed=gzipSync(kernel,{level:9});
+await writeFile('dist/vendor/occt/occt.wasm.gz',compressed);
+console.log(`Geometry kernel: ${(kernel.length/1048576).toFixed(1)} → ${(compressed.length/1048576).toFixed(1)} MiB over the network`);
 console.log('Static site built → dist/');

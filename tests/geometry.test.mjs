@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import init from 'opencascade.js/dist/node.js';
-import {readStep,projectView} from '../src/occt-kernel.js';
+import {readStep,projectView,createStepSession} from '../src/occt-kernel.js';
 import {entityBounds} from '../src/model.js';
 test('STEP exact projection: analytic holes, hidden edges, rotation and three orthogonal views',async()=>{
  const oc=await init({module:{wasmBinary:readFileSync(new URL('../node_modules/opencascade.js/dist/opencascade.full.wasm',import.meta.url))}});
@@ -13,4 +13,15 @@ test('STEP exact projection: analytic holes, hidden edges, rotation and three or
  assert.equal(top.entities.filter(e=>e.type==='circle').length,40);assert.equal(bottom.entities.filter(e=>e.type==='circle').length,40);assert.equal(front.entities.filter(e=>e.type==='circle').length,0);
  assert.ok(top.entities.length>bottom.entities.length);shape.delete();
  assert.throws(()=>readStep(oc,new TextEncoder().encode('not a STEP file')));
+ const stages=[],session=createStepSession(oc,readFileSync(new URL('../assets/demo.step',import.meta.url)),s=>stages.push(s));
+ const initial=session.convert({views:['top','bottom','front']});
+ assert.deepEqual(initial.views[0],top);
+ stages.length=0;
+ const changed=session.convert({views:['top','front','left']},s=>stages.push(s));
+ assert.equal(changed.views[0],initial.views[0]);assert.equal(changed.views[1],initial.views[2]);
+ assert.equal(stages.filter(s=>s.startsWith('计算')).length,1);assert.ok(stages.some(s=>s.startsWith('计算左侧')));
+ const turned=session.convert({rotation:90});assert.deepEqual(turned.views[0],rotated);
+ assert.notEqual(turned.views[0],initial.views[0]);
+ const detailed=session.convert({detail:'mechanical'});assert.notEqual(detailed.views[0],initial.views[0]);
+ session.dispose();session.dispose();assert.throws(()=>session.convert(),/模型已释放/);
 });
