@@ -7,5 +7,6 @@ await mkdir('dist/vendor/occt',{recursive:true});
 for(const [from,to] of [['opencascade.full.js','occt.js'],['opencascade.full.wasm','occt.wasm']])await cp(`node_modules/opencascade.js/dist/${from}`,`dist/vendor/occt/${to}`);
 const kernel=await readFile('dist/vendor/occt/occt.wasm'),compressed=gzipSync(kernel,{level:9});
 await writeFile('dist/vendor/occt/occt.wasm.gz',compressed);
+await writeFile('dist/.nojekyll','');
 console.log(`Geometry kernel: ${(kernel.length/1048576).toFixed(1)} → ${(compressed.length/1048576).toFixed(1)} MiB over the network`);
 console.log('Static site built → dist/');

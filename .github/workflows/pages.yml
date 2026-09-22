@@ -1,39 +1,75 @@
 name: Verify and publish OpenStep2DWG
+
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['V[0-9]*', 'v[0-9]*']
   pull_request:
     branches: [main]
   workflow_dispatch:
+
 permissions: {}
+
+# PR checks are independent; production deployments run in order.
 concurrency:
-  group: openstep-${{ github.ref }}
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.event.pull_request.number) || 'pages-production' }}
+  queue: max
   cancel-in-progress: false
+
 jobs:
   verify:
+    name: Test and build
+    if: github.event.deleted != true
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out source
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const {version}=JSON.parse(readFileSync('package.json'));
+          if (process.env.RELEASE_TAG.replace(/^v/i, '') !== version) {
+            throw Error(`Tag ${process.env.RELEASE_TAG} does not match package version ${version}`);
+          }
+          NODE
+      - name: Cache Rust compilation
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/wasm-bindgen*
+            engine/target
+          key: ${{ runner.os }}-${{ runner.arch }}-rust-1.98.1-bindgen-0.2.128-${{ hashFiles('engine/Cargo.lock', 'engine/Cargo.toml', 'engine/src/**') }}
       - name: Compile DWG engine from locked source
         run: |
           rustup toolchain install 1.98.1 --profile minimal
           rustup default 1.98.1
           bash scripts/build-engine.sh
-      - run: npm test
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - name: Test geometry and CAD exports
+        run: npm test
+      - name: Build static site
+        run: npm run build
+      - name: Install test browser
+        run: npx playwright install --with-deps chromium
+      - name: Test browser conversion and downloads
+        run: npm run test:e2e
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -42,29 +78,34 @@ jobs:
           path: |
             test-results/
             docs/workbench.png
+            docs/drawing.png
             docs/export.png
           retention-days: 14
-      - name: Package site
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         uses: actions/upload-pages-artifact@v5
         with:
           path: dist
-      - name: Prepare downloadable application
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Package downloadable application
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          cd dist
-          zip -qr "../OpenStep2DWG-$RELEASE_TAG.zip" .
+          mkdir release
+          (cd dist && zip -qr "../release/OpenStep2DWG-$RELEASE_TAG.zip" .)
+          (cd release && sha256sum ./*.zip > SHA256SUMS.txt)
       - name: Upload application archive
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v7
         with:
           name: application
-          path: OpenStep2DWG-*.zip
+          path: release/
+          retention-days: 30
+
   pages:
+    name: Publish GitHub Pages
     needs: verify
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -74,22 +115,32 @@ jobs:
       name: github-pages
       url: ${{ steps.publish.outputs.page_url }}
     steps:
-      - uses: actions/configure-pages@v6
-      - uses: actions/deploy-pages@v5
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+      - name: Deploy verified site
+        uses: actions/deploy-pages@v5
         id: publish
+
   release:
-    needs: verify
-    if: startsWith(github.ref, 'refs/tags/v')
+    name: Publish release archive
+    needs: [verify, pages]
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:
           name: application
-      - name: Create release
+      - name: Create or update release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: gh release create "$RELEASE_TAG" OpenStep2DWG-*.zip --title "OpenStep2DWG $RELEASE_TAG" --generate-notes
+        run: |
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" OpenStep2DWG-*.zip SHA256SUMS.txt --clobber
+          else
+            gh release create "$RELEASE_TAG" OpenStep2DWG-*.zip SHA256SUMS.txt --verify-tag --title "OpenStep2DWG $RELEASE_TAG" --generate-notes
+          fi

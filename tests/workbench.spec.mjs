@@ -24,7 +24,8 @@ test('workbench: canvas zoom, move, undo, project restore and all four real down
   if(format==='png')expect(bytes.subarray(1,4).toString()).toBe('PNG');
   if(format==='svg')expect(bytes.toString()).not.toContain('view-outline');
  }
- await page.locator('#export-format').selectOption('dwg');await expect(page.locator('#download-export')).toBeEnabled({timeout:60000});await expect(page.locator('#toast')).toBeHidden({timeout:10000});await page.screenshot({path:'docs/export.png'});await page.locator('#close-export').click();await page.locator('#load-demo').click();await page.locator('#fit').click();await page.locator('.sidebar').evaluate(e=>e.scrollTop=0);await page.screenshot({path:'docs/workbench.png'});expect(errors).toEqual([]);
+ await page.locator('#export-format').selectOption('dwg');await expect(page.locator('#download-export')).toBeEnabled({timeout:60000});await expect(page.locator('#toast')).toBeHidden({timeout:10000});await page.screenshot({path:'docs/export.png'});await page.locator('#close-export').click();await page.locator('#load-demo').click();await page.locator('#fit').click();await page.locator('.sidebar').evaluate(e=>e.scrollTop=0);await page.screenshot({path:'docs/workbench.png'});
+ await page.getByRole('button',{name:'图纸设置',exact:true}).click();await page.screenshot({path:'docs/drawing.png'});expect(errors).toEqual([]);
 });
 test('STEP import runs in a Worker with local requests only, supports cancel and invalid files',async({page})=>{
  const requests=[];let workers=0;page.on('worker',()=>workers++);page.on('request',req=>requests.push([req.url(),req.method()]));

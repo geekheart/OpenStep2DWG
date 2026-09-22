@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenStep2DWG · 工程图工作台</title><meta name="theme-color" content="#f7f9fa"><meta name="description" content="纯前端 STEP 转 DWG 工程图工作台。精确投影、A4 排版与本地导出。"><link rel="icon" href="assets/favicon.svg"><link rel="stylesheet" href="style.css"></head>
 <body>
-<header class="app-header"><a href="./" class="brand"><span class="brand-mark">◇</span><span>Open<span class="brand-light">Step2DWG</span><small>工程图工作台</small></span></a><div class="header-actions"><span class="local-badge"><i></i>本地处理</span><button id="open-project">打开项目</button><button id="save-project">保存项目</button><button id="export" class="primary">↓ 导出图纸</button></div></header>
-<div class="document-bar"><div class="document-title"><span>▧</span><input id="project-name" aria-label="项目名称" maxlength="120"><span class="badge">STEP → DWG</span></div><div class="document-meta"><span id="entity-total"></span><span>A4 · 297 × 210 mm</span><span id="save-state">示例已载入</span></div></div>
+<header class="app-header"><a href="./" class="brand"><span class="brand-mark">◇</span><span>Open<span class="brand-light">Step2DWG</span></span></a><div class="header-actions"><button id="open-project">打开项目</button><button id="save-project">保存项目</button><button id="export" class="primary">↓ 导出图纸</button></div></header>
+<div class="document-bar"><div class="document-title"><span>▧</span><input id="project-name" aria-label="项目名称" maxlength="120"></div><div class="document-meta"><span id="entity-total"></span><span>A4 · 297 × 210 mm</span><span id="save-state">示例已载入</span></div></div>
 <main class="workspace">
 <aside class="sidebar">
 <nav class="tabs" aria-label="编辑面板"><button class="active" data-tab="source">模型与视图</button><button data-tab="drawing">图纸设置</button></nav>

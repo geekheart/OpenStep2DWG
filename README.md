@@ -1,41 +1,74 @@
-# OpenStep2DWG
+<div align="center">
+  <img src="assets/favicon.svg" width="64" height="64" alt="OpenStep2DWG" />
+  <h1>OpenStep2DWG</h1>
+  <p><strong>浏览器里的 STEP 转 DWG 工作台</strong></p>
+  <p>导入模型 · 排版三视图 · 导出工程图</p>
+  <p>
+    <a href="https://geekheart.github.io/OpenStep2DWG/"><strong>打开在线工作台 →</strong></a>
+    &nbsp; · &nbsp; <a href="#快速开始">本地运行</a>
+    &nbsp; · &nbsp; <a href="#部署与发布">部署指南</a>
+    &nbsp; · &nbsp; <a href="https://github.com/geekheart/OpenStep2DWG/releases">下载发行版</a>
+  </p>
+  <p><code>纯前端</code> &nbsp; <code>A4 毫米画布</code> &nbsp; <code>DWG / DXF / SVG / PNG</code></p>
+</div>
 
-纯前端 STEP → DWG 工程图工作台。导入 STEP，在浏览器内生成三视图，调整 A4 排版并导出 CAD 图纸。
+[![验证与发布](https://github.com/geekheart/OpenStep2DWG/actions/workflows/pages.yml/badge.svg)](https://github.com/geekheart/OpenStep2DWG/actions/workflows/pages.yml)
+[![最新版本](https://img.shields.io/github/v/release/geekheart/OpenStep2DWG)](https://github.com/geekheart/OpenStep2DWG/releases/latest)
+[![MIT License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ![OpenStep2DWG 工作台](docs/workbench.png)
 
 左侧选择模型方向和视图组合；中间拖动视图、缩放画布；「图纸设置」调整比例、尺寸标注和标题栏。「导出图纸」生成可编辑的 DWG / DXF 或 SVG / PNG。
 
-## 功能
+## 可以做什么
 
-- STEP / STP 本地导入；精确隐藏线投影，正面 / 背面 / 前侧或第一角法。
-- 0° / 90° / 180° / 270° 模型旋转；完整几何或通用板面薄层简化。
-- A4 横向画布，毫米坐标，自动比例、视图拖动与对齐、撤销和重做。
-- 外形尺寸、图框、图号、版本、日期；JSON 保存投影几何和全部排版参数。
-- DWG / DXF：AutoCAD 2000，原生直线、圆、圆弧、样条和尺寸标注。
-- SVG 矢量图；PNG 150 / 300 / 600 DPI；下载和浏览器支持的「另存为」。
-- 导出 DWG 后在 Worker 内回读，检查文件头及实体数量。转换可随时取消。
-- 连续投影出现空结果时，在独立内核中自动重算失败视图；保留完整几何和已完成的视图。
-- 复用已解析模型和投影视图；浏览器本地缓存最近的转换结果，刷新页面后也可恢复。
+| 功能 | 说明 |
+| --- | --- |
+| STEP 三视图 | 导入 `.step` / `.stp`，精确隐藏线投影；正面 / 背面 / 前侧或第一角法 |
+| 模型方向 | 0° / 90° / 180° / 270°；完整几何或板面薄层简化 |
+| A4 排版 | 横向毫米画布、自动比例、视图拖动与对齐、坐标输入、撤销和重做 |
+| 工程标注 | 外形尺寸、图框、图号、版本、日期；修改比例后仍显示真实毫米尺寸 |
+| CAD 导出 | AutoCAD 2000 DWG / DXF，保留原生直线、圆弧、样条和尺寸标注 |
+| 图像导出 | SVG 矢量图；PNG 150 / 300 / 600 DPI；下载与浏览器支持的「另存为」 |
+| 项目保存 | JSON 包含投影几何和排版参数，打开后可直接编辑、导出 |
+| 转换恢复 | 保留已解析模型与已有视图；空视图自动独立重算；转换结果缓存在本地 |
 
-## 使用
+模型读取、投影与文件生成均在浏览器中执行，源文件不上传。推荐使用桌面版 Chrome / Edge。页面自带可下载的通用开发板示例，打开即可试用排版与导出。
+
+## 从模型到工程图
+
+### 导入与投影
 
 1. 点击左侧文件卡片选择本地 STEP，或把文件拖入画布，自动开始转换。
 2. 更换视图组合或旋转方向后，点击「生成工程图」。
 3. 滚轮缩放画布，空白处拖动平移；拖动一个视图调整位置，或输入毫米坐标。
 4. 在「图纸设置」调整比例和标题栏，点击「导出图纸」。
 
-![导出图纸](docs/export.png)
+进度显示当前阶段和耗时。复杂模型首次精确投影可能需要数分钟，可随时取消；再次选择同一文件、同一参数时，直接读取已有投影缓存。完整模式保留全部模型；「简化板面薄层」按几何规则移除板面上的薄层细节，需要确认结果后再用于制图。
 
-「保存项目」包含已计算的投影、方向、比例、坐标和标题栏。再次打开 JSON 即可排版和导出；原始 STEP 不嵌入 JSON，重新计算投影时需重新选择源文件。
+### 调整比例与标注
+
+![图纸设置：自动比例、外形尺寸、图框、线宽与标题栏](docs/drawing.png)
+
+「自动适配比例」把三视图放入 A4 图框；关闭后可输入绘图比例。尺寸标注仍显示模型的实际毫米尺寸。标题栏中的图号、版本和日期随 JSON 项目一起保存。
 
 快捷键：`Ctrl/⌘ Z` 撤销，`Ctrl/⌘ Shift Z` 重做，`Ctrl/⌘ S` 保存项目。选中视图后用方向键移动，按住 Shift 每次移动 5 mm。
 
-## 本地运行
+### 导出与继续编辑
+
+![导出图纸](docs/export.png)
+
+选择格式，等待文件准备完成后点击「下载文件」或「另存为」。DWG 生成后会在 Worker 中回读检查；PNG 可设置分辨率，SVG 保留矢量轮廓。导出图纸不包含编辑时的选中框。
+
+「保存项目」包含已计算的投影、方向、比例、坐标和标题栏。再次打开 JSON 即可排版和导出；原始 STEP 不嵌入 JSON，重新计算投影时需重新选择源文件。
+
+## 快速开始
 
 需要 Node.js 24 或更新版本。仓库包含编译好的 DWG WebAssembly，普通前端开发无需安装 Rust。
 
 ```sh
+git clone https://github.com/geekheart/OpenStep2DWG.git
+cd OpenStep2DWG
 npm ci
 npm run build
 npm run dev
@@ -81,7 +114,7 @@ npm run dev
 - 自动尺寸是投影视图的整体包络尺寸，不自动推断公差、加工基准或装配要求。薄层简化适合主要板面平行于 XY 平面的模型，需检查结果。
 - DWG 内部回读不能代替所有 CAD 软件的兼容性测试；独立验证方法与记录见 [验证说明](docs/VALIDATION.md)。
 
-## 验证与发布
+## 开发与验证
 
 ```sh
 npm test
@@ -92,8 +125,66 @@ npm run test:e2e
 
 本地端到端测试默认使用已安装的 Chrome；CI 使用 Playwright Chromium。`STEP_TEST_FILE=/path/to/model.step npm run test:e2e -- --grep 'real STEP regression'` 可运行本地真实模型回归。测试模型不进入静态站点。
 
-GitHub Actions 在 PR、main 和版本 tag 上执行测试；`v*` tag 或手动运行发布工作流时，将纯静态 `dist/` 部署到 GitHub Pages，并为 tag 创建打包附件。仓库 Settings → Pages 的 Source 需设为 **GitHub Actions**。
+工作流还会使用 Rust 1.98.1 与 wasm-bindgen 0.2.128，从锁定的 Cargo 依赖重建 DWG 内核，重新运行几何与导出测试。浏览器测试覆盖转换、取消、空视图恢复、缓存、画布操作、项目恢复以及四种格式的真实下载；截图由实际页面生成。
+
+```text
+app.js                    界面、画布交互、项目与下载
+src/occt-kernel.js         STEP 读取与精确隐藏线投影
+src/step-worker.js         模型会话和视图复用
+src/projection-worker.js   独立内核恢复失败视图
+src/model.js               A4 排版、标注和 SVG
+src/dxf.js                 CAD 实体与原生尺寸输出
+src/dwg-worker.js          DWG 编码和回读
+engine/                   Rust 包装器、锁定依赖及 WASM
+tests/                    几何、工程图与浏览器回归
+docs/                     界面截图、独立 CAD 验证及许可
+.github/workflows/        自动检查、Pages 与 Release
+```
 
 示例 `DEMO-BOARD.step` 为本项目程序生成的通用开发板几何，可运行 `node scripts/create-demo.mjs` 重建。它不包含客户 HDK 或产品模型。
 
-本项目应用代码使用 MIT；依赖保留各自许可证。
+## 部署与发布
+
+### GitHub Pages
+
+在线地址：**[geekheart.github.io/OpenStep2DWG](https://geekheart.github.io/OpenStep2DWG/)**
+
+[发布工作流](.github/workflows/pages.yml) 参考 [OpenBoxHub](https://github.com/geekheart/OpenBoxHub) 的静态部署方式：
+
+| 触发方式 | 执行结果 |
+| --- | --- |
+| Pull Request 到 `main` | 安装锁定依赖、编译内核、测试、构建和浏览器检查 |
+| 推送 `main` | 完成检查后发布 GitHub Pages |
+| 推送 `V数字…` 或 `v数字…` 标签 | 完成检查后发布 Pages，创建 GitHub Release 与静态站点 ZIP、SHA-256 校验文件 |
+| 手动运行 | 选择 `main` 或版本标签，执行相同检查与发布流程 |
+
+部署自己的副本：
+
+1. Fork 仓库并启用 Actions。
+2. 在 **Settings → Pages** 将 Source 设为 **GitHub Actions**。
+3. 在 **Settings → Environments → github-pages** 中允许 `main` 分支，以及 `V*` / `v*` 标签。
+4. 推送代码，或在 Actions 中手动运行 **Verify and publish OpenStep2DWG**。
+5. 等待全部任务通过后打开 Pages 地址。
+
+发布 `V1.0.0` 的命令如下。后续版本先更新 `package.json`、`package-lock.json` 和 `CHANGELOG.md`；标签版本须与包版本一致。
+
+```sh
+git tag -a V1.0.0 -m "OpenStep2DWG V1.0.0"
+git push origin main V1.0.0
+```
+
+仅创建本地标签不会触发 Actions，需要将标签推送到远端。发布任务串行运行；PR 没有 Pages 或 Release 写入权限。
+
+### 任意静态服务器
+
+运行 `npm ci && npm run build` 后部署完整 `dist/`，或下载 [Release](https://github.com/geekheart/OpenStep2DWG/releases/latest) 中的静态站点 ZIP 并解压。保留目录结构，通过 HTTP / HTTPS 提供访问：
+
+```sh
+python3 -m http.server 8080 --bind 127.0.0.1 --directory dist
+```
+
+发行版 ZIP 解压后直接包含站点文件，将上面命令的 `dist` 替换为解压目录。服务器需正确提供 `.wasm` 文件；`.wasm.gz` 是由应用主动解压的静态文件，不要再额外设置 `Content-Encoding: gzip`。所有资源路径均为相对路径，支持 GitHub Pages 仓库子目录。请通过 HTTP / HTTPS 打开，`file://` 无法可靠加载 Worker 和 WASM。
+
+## 许可与贡献
+
+应用代码使用 [MIT](LICENSE)；CAD 内核及其他依赖保留各自许可证，见 [第三方声明](THIRD_PARTY_NOTICES.md)。开发约定见 [AGENTS.md](AGENTS.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。反馈转换问题时请说明浏览器版本、视图组合、旋转角度及报错阶段；仅提交允许公开的最小复现模型。
