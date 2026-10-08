@@ -1,3 +1,4 @@
+import {localizedError,reportMessage} from './i18n.js';
 // OpenCascade adapters. This module also runs under Node for reproducible geometry tests.
 const TAU = Math.PI * 2;
 const xy = p => { const r=[p.X(),p.Y()];p.delete();return r; };
@@ -11,24 +12,24 @@ export function readStep(oc, bytes, report=()=>{}) {
   const filename='/source.step', reader=new oc.STEPControl_Reader_1(),progress=new oc.Message_ProgressRange_1();
   oc.FS.writeFile(filename,bytes);
   try {
-    report('本地解析 STEP',10);
-    if(reader.ReadFile(filename).value!==oc.IFSelect_ReturnStatus.IFSelect_RetDone.value) throw new Error('无法读取 STEP 文件');
+    reportMessage(report,'progress.parse',10);
+    if(reader.ReadFile(filename).value!==oc.IFSelect_ReturnStatus.IFSelect_RetDone.value) throw localizedError('error.readStep');
     reader.SetSystemLengthUnit(1);
-    report('构建实体几何',16);
-    if(!reader.TransferRoots(progress)) throw new Error('STEP 中没有可转换的几何体');
+    reportMessage(report,'progress.solids',16);
+    if(!reader.TransferRoots(progress)) throw localizedError('error.noGeometry');
     const shape=reader.OneShape();
-    if(shape.IsNull()) throw new Error('STEP 模型为空');
+    if(shape.IsNull()) throw localizedError('error.emptyModel');
     return shape;
   } finally {reader.delete();progress.delete();oc.FS.unlink(filename);}
 }
 export function writeBREP(oc,shape){
   const path='/projection.brep',progress=new oc.Message_ProgressRange_1();
-  try{if(!oc.BRepTools.Write_3(shape,path,progress))throw Error('模型快照生成失败');return oc.FS.readFile(path);}
+  try{if(!oc.BRepTools.Write_3(shape,path,progress))throw localizedError('error.writeSnapshot');return oc.FS.readFile(path);}
   finally{progress.delete();if(oc.FS.analyzePath(path).exists)oc.FS.unlink(path);}
 }
 export function readBREP(oc,bytes){
   const path='/projection.brep',shape=new oc.TopoDS_Shape(),builder=new oc.BRep_Builder(),progress=new oc.Message_ProgressRange_1();
-  try{oc.FS.writeFile(path,bytes);if(!oc.BRepTools.Read_2(shape,path,builder,progress)||shape.IsNull())throw Error('模型快照读取失败');return shape;}
+  try{oc.FS.writeFile(path,bytes);if(!oc.BRepTools.Read_2(shape,path,builder,progress)||shape.IsNull())throw localizedError('error.readSnapshot');return shape;}
   catch(error){shape.delete();throw error;}
   finally{builder.delete();progress.delete();if(oc.FS.analyzePath(path).exists)oc.FS.unlink(path);}
 }
@@ -65,14 +66,14 @@ export function mechanicalShape(oc,shape,tolerance=.08) {
   }
   try {
     const result=visit(shape),before=bounds(oc,shape),after=bounds(oc,result);
-    if(before.flat().some((v,i)=>Math.abs(v-after.flat()[i])>1e-5)) {result.delete();throw new Error('简化改变了模型外形尺寸，请使用完整细节');}
+    if(before.flat().some((v,i)=>Math.abs(v-after.flat()[i])>1e-5)) {result.delete();throw localizedError('error.simplifyBounds');}
     return {shape:result,removed};
   } finally {builder.delete();}
 }
 function sample(oc,c,a,b,tolerance) {
   const s=new oc.GCPnts_QuasiUniformDeflection_4(c,tolerance,a,b,oc.GeomAbs_Shape.GeomAbs_C0);
   try {
-    if(!s.IsDone() || s.NbPoints()>100000)throw new Error('曲线采样失败');
+    if(!s.IsDone() || s.NbPoints()>100000)throw localizedError('error.sampleCurve');
     return Array.from({length:s.NbPoints()},(_,i)=>xy(s.Value(i+1)));
   } finally {s.delete();}
 }
@@ -80,7 +81,7 @@ function extract(oc,edge,tolerance) {
   const c=new oc.BRepAdaptor_Curve_2(edge);
   try {
     const a=c.FirstParameter(), b=c.LastParameter(), type=c.GetType().value;
-    if(!Number.isFinite(a+b))throw new Error('模型中存在无限曲线');
+    if(!Number.isFinite(a+b))throw localizedError('error.infiniteCurve');
     const p=xy(c.Value(a)),q=xy(c.Value(b));
     if(type===oc.GeomAbs_CurveType.GeomAbs_Line.value) {
       if(Math.hypot(q[0]-p[0],q[1]-p[1])<1e-8)return null;
@@ -113,7 +114,7 @@ function extract(oc,edge,tolerance) {
         if(isSpline)bs.Segment(a,b,1e-10);if(bs.IsPeriodic())bs.SetNotPeriodic();
         const knots=[],poles=[],weights=[];
         const first=bs.Knot(1),range=bs.Knot(bs.NbKnots())-first;
-        if(range<=0)throw new Error('无效样条节点');
+        if(range<=0)throw localizedError('error.splineKnots');
         for(let i=1;i<=bs.NbKnots();i++)for(let j=0;j<bs.Multiplicity(i);j++)knots.push((bs.Knot(i)-first)/range);
         for(let i=1;i<=bs.NbPoles();i++){poles.push(xy(bs.Pole(i)));weights.push(bs.Weight(i));}
         return {type:'spline',degree:bs.Degree(),knots,poles,weights,points};
@@ -127,7 +128,8 @@ function extract(oc,edge,tolerance) {
 export const VIEW_AXES={top:[[0,0,1],[1,0,0]],bottom:[[0,0,-1],[-1,0,0]],front:[[0,-1,0],[1,0,0]],left:[[-1,0,0],[0,-1,0]]};
 export class EmptyProjectionError extends Error {
   constructor(view,rotation){
-    super(`${{top:'正面',bottom:'背面',front:'前侧',left:'左侧'}[view]}投影失败（${rotation}°）：内核未返回可见轮廓。已保留模型和已完成视图。`);
+    const translated=localizedError('error.emptyProjection',{viewId:view,rotation});
+    super(translated.message);Object.assign(this,{messageKey:translated.messageKey,values:translated.values});
     this.code='EMPTY_PROJECTION';this.view=view;
   }
 }
@@ -162,14 +164,14 @@ export function projectView(oc,shape,name,rotation=0,tolerance=.01) {
 export function createStepSession(oc,bytes,progress=()=>{}) {
   const raw=readStep(oc,bytes,progress);
   let envelope,mechanical=null,disposed=false;
-  try {progress('计算精确外形尺寸',22);envelope=bounds(oc,raw);}
+  try {reportMessage(progress,'progress.bounds',22);envelope=bounds(oc,raw);}
   catch(error){raw.delete();throw error;}
   const projections=new Map();
   const projectionKey=(options,name)=>JSON.stringify([options.detail||'full',name,options.rotation||0,options.tolerance||.01]);
   function selectShape(options,report=()=>{}){
-    if(disposed)throw Error('模型已释放，请重新导入');
+    if(disposed)throw localizedError('error.disposed');
     if(options.detail==='mechanical'){
-      if(!mechanical){report('简化表面细节',25);mechanical=mechanicalShape(oc,raw);}
+      if(!mechanical){reportMessage(report,'progress.simplify',25);mechanical=mechanicalShape(oc,raw);}
       return mechanical;
     }
     return {shape:raw,removed:0};
@@ -177,8 +179,8 @@ export function createStepSession(oc,bytes,progress=()=>{}) {
   return {
     snapshot(options={}){return writeBREP(oc,selectShape(options).shape);},
     remember(options,view){
-      if(disposed)throw Error('模型已释放，请重新导入');
-      if(!VIEW_AXES[view?.id]||!view.entities?.length)throw Error('恢复的投影无效');
+      if(disposed)throw localizedError('error.disposed');
+      if(!VIEW_AXES[view?.id]||!view.entities?.length)throw localizedError('error.restoredProjection');
       projections.set(projectionKey(options,view.id),{...view,isolated:true});
     },
     convert(options={},report=()=>{}) {
@@ -186,15 +188,15 @@ export function createStepSession(oc,bytes,progress=()=>{}) {
       const names=options.views||['top','bottom','front'],views=[];
       for(let i=0;i<names.length;i++){
         const name=names[i],key=projectionKey(options,name);
-        const cached=projections.get(key),label={top:'正面',bottom:'背面',front:'前侧',left:'左侧'}[name];
-        report(`${cached?'复用':'计算'}${label}投影 · ${i+1}/${names.length}`,30+i/names.length*60);
+        const cached=projections.get(key);
+        reportMessage(report,cached?'progress.reuseView':'progress.project',30+i/names.length*60,{viewId:name,index:i+1,total:names.length});
         const view=cached||projectView(oc,shape,name,options.rotation||0,options.tolerance||.01);
         projections.delete(key);projections.set(key,view);
         if(projections.size>12)projections.delete(projections.keys().next().value);
         views.push(view);
       }
       const approximated=views.reduce((n,v)=>n+v.entities.filter(e=>e.approximated).length,0);
-      report('排版完成',100);
+      reportMessage(report,'progress.layout',100);
       return {views,envelope,removed,approximated,unit:'mm',options};
     },
     dispose(){if(disposed)return;disposed=true;projections.clear();if(mechanical&&mechanical.shape!==raw)mechanical.shape.delete();raw.delete();}

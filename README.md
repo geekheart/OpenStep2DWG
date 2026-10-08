@@ -1,3 +1,5 @@
+[简体中文](README.md) | [English](README.en.md)
+
 <div align="center">
   <img src="assets/favicon.svg" width="64" height="64" alt="OpenStep2DWG" />
   <h1>OpenStep2DWG</h1>
@@ -34,6 +36,8 @@
 | 转换恢复 | 保留已解析模型与已有视图；空视图自动独立重算；转换结果缓存在本地 |
 
 模型读取、投影与文件生成均在浏览器中执行，源文件不上传。推荐使用桌面版 Chrome / Edge。页面自带可下载的通用开发板示例，打开即可试用排版与导出。
+
+页面默认使用简体中文；右上角可随时切换 English，切换不会重置模型、排版或撤销记录。英文直达地址：[English workbench](https://geekheart.github.io/OpenStep2DWG/?lang=en)。旁边的 GitHub 图标可打开本仓库。语言只改变界面提示，不改写文件名、图号、用户填写内容或 CAD 标准字段。
 
 ## 从模型到工程图
 
@@ -129,6 +133,7 @@ npm run test:e2e
 
 ```text
 app.js                    界面、画布交互、项目与下载
+src/i18n.js               中英文翻译、Worker 消息与语言切换
 src/occt-kernel.js         STEP 读取与精确隐藏线投影
 src/step-worker.js         模型会话和视图复用
 src/projection-worker.js   独立内核恢复失败视图
@@ -166,11 +171,11 @@ docs/                     界面截图、独立 CAD 验证及许可
 4. 推送代码，或在 Actions 中手动运行 **Verify and publish OpenStep2DWG**。
 5. 等待全部任务通过后打开 Pages 地址。
 
-发布 `V1.0.0` 的命令如下。后续版本先更新 `package.json`、`package-lock.json` 和 `CHANGELOG.md`；标签版本须与包版本一致。
+发布 `V1.0.1` 的命令如下。后续版本先更新 `package.json`、`package-lock.json`、`CHANGELOG.md` 和 `docs/releases/V版本号.md` 中的中英文发布说明；标签版本须与包版本一致。
 
 ```sh
-git tag -a V1.0.0 -m "OpenStep2DWG V1.0.0"
-git push origin main V1.0.0
+git tag -a V1.0.1 -m "OpenStep2DWG V1.0.1"
+git push origin main V1.0.1
 ```
 
 仅创建本地标签不会触发 Actions，需要将标签推送到远端。发布任务串行运行；PR 没有 Pages 或 Release 写入权限。
@@ -187,4 +192,4 @@ python3 -m http.server 8080 --bind 127.0.0.1 --directory dist
 
 ## 许可与贡献
 
-应用代码使用 [MIT](LICENSE)；CAD 内核及其他依赖保留各自许可证，见 [第三方声明](THIRD_PARTY_NOTICES.md)。开发约定见 [AGENTS.md](AGENTS.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。反馈转换问题时请说明浏览器版本、视图组合、旋转角度及报错阶段；仅提交允许公开的最小复现模型。
+应用代码使用 [MIT](LICENSE)（Copyright © 2026 geekheart）；CAD 内核及其他依赖保留各自许可证，见 [第三方声明](THIRD_PARTY_NOTICES.md)。开发约定见 [AGENTS.md](AGENTS.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)。反馈转换问题时请说明浏览器版本、视图组合、旋转角度及报错阶段；仅提交允许公开的最小复现模型。

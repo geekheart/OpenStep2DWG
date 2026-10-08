@@ -99,3 +99,60 @@ test('local drawing visual review: S31, P4 and all export formats',async({page})
   await page.locator('#close-export').click();await expect(page.locator('#toast')).toBeHidden({timeout:10000});await page.screenshot({path:`.local-review/${name}-workbench.png`});
  }
 });
+
+test('English deep link and live language switching preserve user data, layout and undo history',async({page})=>{
+ await page.goto(url+'/?lang=en');
+ await expect(page.locator('html')).toHaveAttribute('lang','en');
+ await expect(page.locator('#entity-total')).toHaveText('124 contours');
+ await expect(page.locator('#save-state')).toHaveText('Demo loaded');
+ await expect(page.locator('#export')).toHaveText('↓ Export drawing');
+ await expect(page.locator('#github-link')).toHaveAttribute('href','https://github.com/geekheart/OpenStep2DWG');
+ await expect(page.locator('#github-link')).toHaveAttribute('rel','noopener noreferrer');
+ await expect(page.locator('#github-link path')).toHaveCSS('fill','rgb(62, 75, 86)');
+ await expect(page.locator('#github-link path')).toHaveCSS('stroke','none');
+ await page.screenshot({path:'docs/workbench.en.png'});
+ await page.locator('#project-name').fill('我的图纸 / User drawing');
+ // The model reflects input before blur/change, so a locale rerender cannot drop a draft name.
+ await expect(page.locator('#paper')).toContainText('我的图纸 / User drawing');
+ await expect(page.locator('#undo')).toBeEnabled();
+ await page.locator('#language-select').selectOption('zh-CN');
+ await expect(page.locator('#project-name')).toHaveValue('我的图纸 / User drawing');
+ await page.locator('#language-select').selectOption('en');
+ const originalX=await page.locator('#view-x').inputValue();
+ await page.locator('#view-x').fill('65.5');await page.locator('#view-x').press('Tab');
+ const save=async()=>{const event=page.waitForEvent('download');await page.locator('#save-project').click();return JSON.parse(await readFile(await (await event).path(),'utf8'));};
+ const before=await save();
+ await page.locator('#language-select').selectOption('zh-CN');
+ await expect(page.locator('#save-state')).toHaveText('项目已保存');
+ await expect(page.locator('#project-name')).toHaveValue('我的图纸 / User drawing');
+ await expect(page.locator('#view-x')).toHaveValue('65.5');
+ expect(await save()).toEqual(before);
+ await page.locator('#undo').click();await expect(page.locator('#view-x')).toHaveValue(originalX);
+ await page.locator('#language-select').selectOption('en');
+ await page.locator('#redo').click();await expect(page.locator('#view-x')).toHaveValue('65.5');
+ expect(await save()).toEqual(before);
+ await page.locator('#export').click();await expect(page.locator('#export-info')).toContainText('DWG roundtrip verified',{timeout:60000});
+ await expect(page.locator('#export-title')).toHaveText('Export drawing');
+ await page.locator('#close-export').click();
+ await page.locator('#project-file').setInputFiles({name:'broken.json',mimeType:'application/json',buffer:Buffer.from('{}')});
+ await expect(page.locator('#toast')).toHaveText('Unsupported OpenStep2DWG project');
+ await expect(page.locator('#project-name')).toHaveValue('我的图纸 / User drawing');
+ const text=await page.locator('body').innerText();
+ expect(text.replaceAll('简体中文','').replaceAll('我的图纸','')).not.toMatch(/\p{Script=Han}/u);
+});
+
+test('English conversion reports translated Worker progress and validation errors',async({page})=>{
+ await page.addInitScript(()=>{window.conversions=[];window.addEventListener('conversion-complete',e=>window.conversions.push(e.detail));});
+ await page.goto(url+'/?lang=en');
+ await page.locator('#step-file').setInputFiles('assets/demo.step');
+ await expect(page.locator('#save-state')).toHaveText('Conversion complete',{timeout:60000});
+ await expect(page.locator('#source-info')).toContainText('local computation');
+ const timings=await page.evaluate(()=>window.conversions.at(-1).timings);
+ expect(timings.some(stage=>stage.stage.includes('projection'))).toBe(true);
+ expect(timings.every(stage=>!(/\p{Script=Han}/u).test(stage.stage))).toBe(true);
+ await page.locator('#step-file').setInputFiles({name:'invalid.step',mimeType:'application/step',buffer:Buffer.from('invalid data')});
+ await expect(page.locator('#conversion-error')).toHaveText('Could not read the STEP file',{timeout:60000});
+ await page.locator('#language-select').selectOption('zh-CN');
+ await expect(page.locator('#conversion-error')).toHaveText('无法读取 STEP 文件');
+ await expect(page.locator('#save-state')).toHaveText('转换失败');
+});

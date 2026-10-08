@@ -1,3 +1,4 @@
+import {localizedError} from './i18n.js';
 // Increment when projection semantics or the pinned geometry engine changes.
 export const CACHE_VERSION='occt-b5ff984-projection-2';
 export function conversionKey(hash,options){
@@ -11,7 +12,7 @@ function open(){
   request.onupgradeneeded=()=>request.result.createObjectStore('projections',{keyPath:'key'});
   request.onsuccess=()=>{const db=request.result;db.onversionchange=()=>{db.close();database=null;};resolve(db);};
   request.onerror=()=>reject(request.error);
-  request.onblocked=()=>reject(Error('缓存暂不可用'));
+  request.onblocked=()=>reject(localizedError('error.cache'));
  });
 }
 function done(transaction){return new Promise((resolve,reject)=>{transaction.oncomplete=resolve;transaction.onerror=()=>reject(transaction.error);transaction.onabort=()=>reject(transaction.error);});}

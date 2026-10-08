@@ -78,6 +78,7 @@ jobs:
           path: |
             test-results/
             docs/workbench.png
+            docs/workbench.en.png
             docs/drawing.png
             docs/export.png
           retention-days: 14
@@ -92,6 +93,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           mkdir release
+          cp "docs/releases/V${RELEASE_TAG#?}.md" release/RELEASE_NOTES.md
           (cd dist && zip -qr "../release/OpenStep2DWG-$RELEASE_TAG.zip" .)
           (cd release && sha256sum ./*.zip > SHA256SUMS.txt)
       - name: Upload application archive
@@ -141,6 +143,7 @@ jobs:
         run: |
           if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" OpenStep2DWG-*.zip SHA256SUMS.txt --clobber
+            gh release edit "$RELEASE_TAG" --notes-file RELEASE_NOTES.md
           else
-            gh release create "$RELEASE_TAG" OpenStep2DWG-*.zip SHA256SUMS.txt --verify-tag --title "OpenStep2DWG $RELEASE_TAG" --generate-notes
+            gh release create "$RELEASE_TAG" OpenStep2DWG-*.zip SHA256SUMS.txt --verify-tag --title "OpenStep2DWG $RELEASE_TAG" --notes-file RELEASE_NOTES.md
           fi

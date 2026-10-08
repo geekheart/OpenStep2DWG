@@ -1,5 +1,5 @@
-export const APP_VERSION='0.1.0';
-export const VIEW_LABELS={top:'正面',bottom:'背面',front:'前侧',left:'左侧'};
+import {localizedError,t} from './i18n.js';
+export const APP_VERSION='1.0.1';
 const TAU=Math.PI*2;
 export const number=v=>Number(v.toFixed(7));
 export const escapeXML=s=>String(s).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
@@ -17,7 +17,7 @@ export function entityPoints(e) {
 export function entityBounds(entities) {
  const b=[Infinity,Infinity,-Infinity,-Infinity];
  for(const e of entities)for(const p of entityPoints(e)){b[0]=Math.min(b[0],p[0]);b[1]=Math.min(b[1],p[1]);b[2]=Math.max(b[2],p[0]);b[3]=Math.max(b[3],p[1]);}
- if(!b.every(Number.isFinite))throw Error('视图没有有效几何体');
+ if(!b.every(Number.isFinite))throw localizedError('error.emptyGeometry');
  return b;
 }
 export function transformEntity(e,scale,dx,dy) {
@@ -53,28 +53,28 @@ export function createProject(geometry,name='Untitled') {
  return layoutProject({format:'OpenStep2DWG',version:1,name,geometry,settings:{scale:1,autoScale:true,dimensions:true,frame:true,revision:'A',drawingNumber:name,date:new Date().toISOString().slice(0,10),lineWidth:.18},positions:{}});
 }
 export function validateProject(data) {
- if(data?.format!=='OpenStep2DWG'||data.version!==1)throw Error('不是支持的 OpenStep2DWG 项目');
- if(typeof data.name!=='string'||data.name.length>200)throw Error('项目名称无效');
+ if(data?.format!=='OpenStep2DWG'||data.version!==1)throw localizedError('error.projectFormat');
+ if(typeof data.name!=='string'||data.name.length>200)throw localizedError('error.projectName');
  const views=data.geometry?.views;
- if(!Array.isArray(views)||views.length!==3||new Set(views.map(v=>v.id)).size!==3||!views.some(v=>v.id==='top')||!views.some(v=>v.id==='front')||!views.some(v=>['bottom','left'].includes(v.id)))throw Error('项目视图不完整');
+ if(!Array.isArray(views)||views.length!==3||new Set(views.map(v=>v.id)).size!==3||!views.some(v=>v.id==='top')||!views.some(v=>v.id==='front')||!views.some(v=>['bottom','left'].includes(v.id)))throw localizedError('error.projectViews');
  let count=0;
  const point=p=>Array.isArray(p)&&p.length===2&&p.every(v=>Number.isFinite(v)&&Math.abs(v)<1e8);
  for(const v of views){
-  if(!Array.isArray(v.entities)||(count+=v.entities.length)>300000)throw Error('项目几何体过多');
+  if(!Array.isArray(v.entities)||(count+=v.entities.length)>300000)throw localizedError('error.tooManyEntities');
   for(const e of v.entities){
-   if(!['line','circle','arc','spline','polyline'].includes(e.type))throw Error('未知曲线类型');
-   if(e.type==='line'&&(!point(e.p)||!point(e.q)))throw Error('直线坐标无效');
-   if(['circle','arc'].includes(e.type)&&(!point(e.c)||!Number.isFinite(e.r)||e.r<=0||e.r>1e8))throw Error('圆弧参数无效');
-   if(e.type==='arc'&&![e.start,e.end].every(Number.isFinite))throw Error('圆弧角度无效');
-   if(['spline','polyline'].includes(e.type)&&(!Array.isArray(e.points)||e.points.length<2||e.points.length>100000||!e.points.every(point)))throw Error('曲线坐标无效');
-   if(e.type==='spline'&&(!Number.isInteger(e.degree)||e.degree<1||e.degree>25||!Array.isArray(e.poles)||!e.poles.every(point)||!Array.isArray(e.knots)||e.knots.length!==e.poles.length+e.degree+1||!e.knots.every((n,i)=>Number.isFinite(n)&&(!i||n>=e.knots[i-1]))||!Array.isArray(e.weights)||e.weights.length!==e.poles.length||!e.weights.every(w=>Number.isFinite(w)&&w>0)))throw Error('样条参数无效');
+   if(!['line','circle','arc','spline','polyline'].includes(e.type))throw localizedError('error.curveType');
+   if(e.type==='line'&&(!point(e.p)||!point(e.q)))throw localizedError('error.line');
+   if(['circle','arc'].includes(e.type)&&(!point(e.c)||!Number.isFinite(e.r)||e.r<=0||e.r>1e8))throw localizedError('error.arc');
+   if(e.type==='arc'&&![e.start,e.end].every(Number.isFinite))throw localizedError('error.arcAngles');
+   if(['spline','polyline'].includes(e.type)&&(!Array.isArray(e.points)||e.points.length<2||e.points.length>100000||!e.points.every(point)))throw localizedError('error.curveCoordinates');
+   if(e.type==='spline'&&(!Number.isInteger(e.degree)||e.degree<1||e.degree>25||!Array.isArray(e.poles)||!e.poles.every(point)||!Array.isArray(e.knots)||e.knots.length!==e.poles.length+e.degree+1||!e.knots.every((n,i)=>Number.isFinite(n)&&(!i||n>=e.knots[i-1]))||!Array.isArray(e.weights)||e.weights.length!==e.poles.length||!e.weights.every(w=>Number.isFinite(w)&&w>0)))throw localizedError('error.spline');
   }
   v.bounds=entityBounds(v.entities);
-  if(!point(data.positions?.[v.id]))throw Error('视图位置无效');
+  if(!point(data.positions?.[v.id]))throw localizedError('error.position');
  }
- if(!Number.isFinite(data.settings?.scale)||data.settings.scale<=0||data.settings.scale>1e6)throw Error('比例无效');
- if(!Number.isFinite(data.settings.lineWidth)||data.settings.lineWidth<.05||data.settings.lineWidth>1)throw Error('线宽无效');
- for(const k of ['revision','drawingNumber','date'])if(typeof data.settings[k]!=='string'||data.settings[k].length>200)throw Error('标题栏无效');
+ if(!Number.isFinite(data.settings?.scale)||data.settings.scale<=0||data.settings.scale>1e6)throw localizedError('error.scale');
+ if(!Number.isFinite(data.settings.lineWidth)||data.settings.lineWidth<.05||data.settings.lineWidth>1)throw localizedError('error.lineWidth');
+ for(const k of ['revision','drawingNumber','date'])if(typeof data.settings[k]!=='string'||data.settings[k].length>200)throw localizedError('error.titleBlock');
  return data;
 }
 const line=(p,q,layer='FRAME')=>({type:'line',p,q,layer});
@@ -148,7 +148,7 @@ export function drawingSVG(project,{interactive=false}={}) {
  let body=other.map(entitySVG).join('');
  for(const group of drawing.groups){
   const [x,y,x1,y1]=group.bounds;
-  body+=`<g ${interactive?`data-view="${group.id}" tabindex="0" role="button" aria-label="${VIEW_LABELS[group.id]}视图"`:''}>${group.entities.map(entitySVG).join('')}${interactive?`<rect class="view-hit" x="${x-1}" y="${y-1}" width="${x1-x+2}" height="${y1-y+2}" fill="transparent" stroke="none"/><rect class="view-outline" x="${x-1}" y="${y-1}" width="${x1-x+2}" height="${y1-y+2}" fill="none" stroke="#147d71" stroke-width=".3" stroke-dasharray="2 1"/>`:''}</g>`;
+  body+=`<g ${interactive?`data-view="${group.id}" tabindex="0" role="button" aria-label="${t('viewSelected',{view:t(`view.${group.id}`)})}"`:''}>${group.entities.map(entitySVG).join('')}${interactive?`<rect class="view-hit" x="${x-1}" y="${y-1}" width="${x1-x+2}" height="${y1-y+2}" fill="transparent" stroke="none"/><rect class="view-outline" x="${x-1}" y="${y-1}" width="${x1-x+2}" height="${y1-y+2}" fill="none" stroke="#147d71" stroke-width=".3" stroke-dasharray="2 1"/>`:''}</g>`;
  }
- return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 297 210" width="297mm" height="210mm" aria-label="A4 工程图"><style>${style}</style><rect width="297" height="210" fill="white"/><g transform="translate(0 210) scale(1 -1)">${body}</g></svg>`;
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 297 210" width="297mm" height="210mm" aria-label="${t('a4Drawing')}"><style>${style}</style><rect width="297" height="210" fill="white"/><g transform="translate(0 210) scale(1 -1)">${body}</g></svg>`;
 }

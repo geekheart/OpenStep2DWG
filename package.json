@@ -1,6 +1,6 @@
 {
   "name": "openstep2dwg",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "浏览器里的 STEP 转 DWG 工作台",
@@ -18,5 +18,6 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"
-  }
+  },
+  "license": "MIT"
 }

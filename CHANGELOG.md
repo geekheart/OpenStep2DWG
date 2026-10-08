@@ -1,5 +1,13 @@
 # Changelog
 
+## V1.0.1 — 2026-10-08
+
+- 统一 MIT 许可；补充完整英文 README 与双语入口。
+- 增加中英文界面、可切换的 Worker 提示及 GitHub 图标按钮；保留模型和排版状态。
+- Add Chinese/English localization, a complete English README and an accessible GitHub link.
+- Keep geometry, CAD data and undo history unchanged when switching languages.
+- [完整中英文发布说明 / Full bilingual release notes](docs/releases/V1.0.1.md)。
+
 ## V1.0.0 — 2026-09-22
 
 - 首个公开版本：浏览器内导入 STEP、生成三视图并导出二维 DWG。
